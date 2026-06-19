@@ -1,5 +1,6 @@
 param(
   [switch]$SkipCodexPlus,
+  [switch]$LinkImagegen,
   [switch]$Force
 )
 
@@ -75,6 +76,17 @@ if (-not $SkipCodexPlus) {
 
   Write-Host "Installed Codex++ user script: $userScriptDest"
   Write-Host "Enabled Codex++ user script: $userScriptsJson"
+}
+
+if ($LinkImagegen) {
+  $linkScript = Join-Path $repoRoot "scripts\link-imagegen-skill.ps1"
+  if (-not (Test-Path -LiteralPath $linkScript)) {
+    throw "Cannot find ImageGen link script: $linkScript"
+  }
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $linkScript
+  if ($LASTEXITCODE -ne 0) {
+    throw "ImageGen link script failed with exit code $LASTEXITCODE"
+  }
 }
 
 Write-Host "Done. Restart Codex++ or reload user scripts."
