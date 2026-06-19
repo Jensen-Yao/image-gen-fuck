@@ -1,0 +1,10 @@
+*.bak*
+*.tmp
+*.log
+
+# Local secret/config files. Do not commit real drawing API keys.
+.env
+.env.*
+settings.json
+imagegen-openai-key.txt
+secrets/
