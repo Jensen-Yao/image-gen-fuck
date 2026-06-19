@@ -85,29 +85,30 @@ Run image CLI calls through the wrapper:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\invoke_imagegen_cli.ps1" generate `
-  --prompt-file '<prompt-file>' `
-  --model 'gpt-image-2' `
-  --size '1024x1024' `
-  --quality 'medium' `
-  --out '<output.png>' `
-  --force
+  -PromptFile '<prompt-file>' `
+  -Model 'gpt-image-2' `
+  -Size '1024x1024' `
+  -Quality 'medium' `
+  -OutputPath '<output.png>' `
+  -Force
 ```
 
 For reference-grounded image generation, use the CLI `edit` subcommand and pass repeated `--image` arguments:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\invoke_imagegen_cli.ps1" edit `
-  --prompt-file '<prompt-file>' `
-  --image '<reference-or-layout-1.png>' `
-  --image '<reference-or-layout-2.png>' `
-  --model 'gpt-image-2' `
-  --size '1536x1024' `
-  --quality 'medium' `
-  --out '<output.png>' `
-  --force
+  -PromptFile '<prompt-file>' `
+  -Image '<reference-or-layout-1.png>','<reference-or-layout-2.png>' `
+  -Model 'gpt-image-2' `
+  -Size '1536x1024' `
+  -Quality 'medium' `
+  -OutputPath '<output.png>' `
+  -Force
 ```
 
 The wrapper sets `OPENAI_API_KEY` and `OPENAI_BASE_URL` only for the Python child process and restores the prior environment in `finally`.
+Use PowerShell-native wrapper parameters such as `-OutputPath`, not raw Python CLI flags such as `--out`; raw `--...` flags may be parsed by PowerShell before they reach `image_gen.py`.
+When troubleshooting argument passing, add `-PrintArgs`; it prints the Python CLI argument list and only reports key presence as `hasApiKey`, never the API key value.
 
 ## Failure Handling
 
@@ -117,7 +118,7 @@ The wrapper sets `OPENAI_API_KEY` and `OPENAI_BASE_URL` only for the Python chil
 - If the API returns `405 Not Allowed` when using `https://code.codingplay.top`, retry once with `https://code.codingplay.top/v1`.
 - If `https://code.codingplay.top/v1` also fails with endpoint/path errors, ask for the correct base URL.
 - If generation succeeds but the command times out, check whether the output file exists and validates before retrying.
-- Always report whether `OPENAI_API_KEY` and `OPENAI_BASE_URL` were restored or cleared after the command.
+- Always report whether `OPENAI_API_KEY` and `OPENAI_BASE_URL` were cleared after the command.
 
 ## Relationship To Codex
 

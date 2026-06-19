@@ -1,6 +1,8 @@
 # image-gen-fuck
 
-`image-gen-fuck` 是一个 Codex skill 辅助包，用来解决一个很具体的问题：当 Codex 桌面端可以正常聊天，但当前会话没有暴露内置 `image_gen` 图像生成工具时，让 Codex 在需要绘图时改走 `$imagegen` skill 自带的 `image_gen.py` CLI，并且只在这次 CLI 调用里临时使用单独的绘图 API key 和 base URL。
+`image-gen-fuck` 是一个 Codex skill 辅助包，用来解决一个很具体的问题：
+
+当 Codex 桌面端可以正常聊天，但当前会话没有暴露内置 `image_gen` 图像生成工具时，让 Codex 在需要绘图时改走 `$imagegen` skill 自带的 `image_gen.py` CLI，并且只在这次 CLI 调用里临时使用单独的绘图 API key 和 base URL。
 
 默认 base URL：
 
@@ -56,6 +58,40 @@ image-gen-fuck/
 powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\install.ps1"
 ```
 
+安装脚本会做两件事：
+
+1. 复制 skill 到：
+
+   ```text
+   %USERPROFILE%\.codex\skills\image-gen-fuck
+   ```
+
+2. 复制 Codex++ 用户脚本到：
+
+   ```text
+   %APPDATA%\Codex++\user_scripts\imagegen-cli-settings.js
+   ```
+
+并尝试在：
+
+```text
+%APPDATA%\Codex++\user_scripts.json
+```
+
+里启用：
+
+```json
+{
+  "user:imagegen-cli-settings.js": true
+}
+```
+
+如果不想安装 Codex++ 用户脚本，只安装 skill：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\install.ps1" -SkipCodexPlus
+```
+
 如果还想让原始 `$imagegen` skill 在 CLI fallback 时自动关联 `$image-gen-fuck`，安装时加上：
 
 ```powershell
@@ -77,24 +113,62 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\link-imagegen-ski
 
 修改后的 `$imagegen` 会在内置 `image_gen` 不暴露时先检查 `$image-gen-fuck` 的 wrapper 配置；只要 `effectiveHasApiKey: true`，就不会再因为当前 shell 没有全局 `OPENAI_API_KEY` 而误判 CLI fallback 不可用。
 
-如果不想安装 Codex++ 用户脚本，只安装 skill：
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\install.ps1" -SkipCodexPlus
-```
-
 ## 配置绘图 API
 
-安装后可以用 Codex++ 右下角“绘图设置”按钮配置，也可以运行：
+安装后可以用两种方式配置。
+
+### 方式一：Codex++ UI
+
+重启 Codex++ 启动的 Codex 桌面端，右下角会出现“绘图设置”按钮。
+
+面板里可以设置：
+
+- 是否启用 CLI 绘图 API 设置
+- 接口地址，也就是 base URL
+- API Key 环境变量名，默认 `OPENAI_API_KEY`
+- 绘图 API key
+
+保存后会写入：
+
+```text
+%APPDATA%\Codex++\settings.json
+```
+
+相关字段：
+
+```json
+{
+  "cliWrapperEnabled": true,
+  "cliWrapperBaseUrl": "https://code.codingplay.top/v1",
+  "cliWrapperApiKey": "<drawing api key>",
+  "cliWrapperApiKeyEnv": "OPENAI_API_KEY"
+}
+```
+
+### 方式二：PowerShell
+
+运行：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\configure_imagegen_cli.ps1"
 ```
 
+脚本会提示输入绘图 API key，然后写入 Codex++ settings 和备用 key 文件：
+
+```text
+%USERPROFILE%\.codex\secrets\imagegen-openai-key.txt
+```
+
 查看当前配置状态，但不打印 key：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\invoke_imagegen_cli.ps1" -ShowConfig
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\configure_imagegen_cli.ps1" -Show
+```
+
+禁用 CLI 绘图设置：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\configure_imagegen_cli.ps1" -Disable
 ```
 
 ## Codex 使用流程
@@ -105,23 +179,58 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\ski
 使用 $imagegen 和 $image-gen-fuck 生成一张图片：……
 ```
 
-正确检查方式是使用 wrapper，而不是直接检查当前 shell 里有没有全局 `OPENAI_API_KEY`：
+Codex 的决策流程：
+
+1. 先读取 `$imagegen`，使用它的提示词整理、透明背景、输出保存等规则。
+2. 如果内置 `image_gen` 工具可用，优先用内置工具。
+3. 如果内置 `image_gen` 工具不可用，并且用户同意 CLI fallback，则读取 `$image-gen-fuck`。
+4. `$image-gen-fuck` 从 Codex++ settings 或备用 key 文件读取绘图配置。
+5. 只在当前 PowerShell 进程里临时设置：
+
+   ```powershell
+   $env:OPENAI_API_KEY = "<drawing key>"
+   $env:OPENAI_BASE_URL = "https://code.codingplay.top/v1"
+   ```
+
+6. 调用：
+
+   ```text
+   %USERPROFILE%\.codex\skills\.system\imagegen\scripts\image_gen.py
+   ```
+
+7. `finally` 中清理 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`。
+
+实际调用时推荐使用辅助 skill 自带的 wrapper，而不是直接检查当前 shell 里有没有全局 `OPENAI_API_KEY`：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\invoke_imagegen_cli.ps1" -ShowConfig
 ```
 
-生成图片示例：
+生成图片：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\invoke_imagegen_cli.ps1" generate `
-  --prompt-file ".\prompt.txt" `
-  --model "gpt-image-2" `
-  --size "1024x1024" `
-  --quality "medium" `
-  --out ".\output.png" `
-  --force
+  -PromptFile ".\prompt.txt" `
+  -Model "gpt-image-2" `
+  -Size "1024x1024" `
+  -Quality "medium" `
+  -OutputPath ".\output.png" `
+  -Force
 ```
+
+注意：调用 wrapper 时使用 PowerShell 参数，例如 `-OutputPath`，不要直接传 Python CLI 的 `--out`。裸 `--out` 可能会被 PowerShell 先解析成 wrapper 参数，导致还没进入 `image_gen.py` 就失败。
+
+排查参数传递时可以临时加上 `-PrintArgs`：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\invoke_imagegen_cli.ps1" generate `
+  -PromptFile ".\prompt.txt" `
+  -OutputPath ".\output.png" `
+  -DryRun `
+  -PrintArgs
+```
+
+它只打印将传给 Python CLI 的参数列表，并用 `hasApiKey: true/false` 表示是否读到了 key，不会打印真实 API key。
 
 ## 安全说明
 
