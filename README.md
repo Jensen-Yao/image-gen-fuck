@@ -30,7 +30,8 @@ image-gen-fuck/
    └─ image-gen-fuck/
       ├─ SKILL.md
       └─ scripts/
-         └─ configure_imagegen_cli.ps1
+         ├─ configure_imagegen_cli.ps1
+         └─ invoke_imagegen_cli.ps1
 ```
 
 ## 依赖
@@ -129,7 +130,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\ski
 查看当前配置状态，但不打印 key：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\configure_imagegen_cli.ps1" -Show
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\invoke_imagegen_cli.ps1" -ShowConfig
 ```
 
 禁用 CLI 绘图设置：
@@ -152,20 +153,32 @@ Codex 的决策流程：
 2. 如果内置 `image_gen` 工具可用，优先用内置工具。
 3. 如果内置 `image_gen` 工具不可用，并且用户同意 CLI fallback，则读取 `$image-gen-fuck`。
 4. `$image-gen-fuck` 从 Codex++ settings 或备用 key 文件读取绘图配置。
-5. 只在当前 PowerShell 进程里临时设置：
-
-   ```powershell
-   $env:OPENAI_API_KEY = "<drawing key>"
-   $env:OPENAI_BASE_URL = "https://code.codingplay.top/v1"
-   ```
-
-6. 调用：
+5. 通过 `invoke_imagegen_cli.ps1` wrapper 临时设置 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`。
+6. wrapper 调用：
 
    ```text
    %USERPROFILE%\.codex\skills\.system\imagegen\scripts\image_gen.py
    ```
 
-7. `finally` 中清理 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`。
+7. `finally` 中恢复调用前的环境变量状态。
+
+不要只检查当前 shell 里有没有全局 `OPENAI_API_KEY`。正确检查方式是：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\invoke_imagegen_cli.ps1" -ShowConfig
+```
+
+生成图片示例：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\invoke_imagegen_cli.ps1" generate `
+  --prompt-file ".\prompt.txt" `
+  --model "gpt-image-2" `
+  --size "1024x1024" `
+  --quality "medium" `
+  --out ".\output.png" `
+  --force
+```
 
 ## 安全说明
 

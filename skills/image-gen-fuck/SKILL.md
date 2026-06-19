@@ -13,6 +13,8 @@ Use this as an operational add-on to `$imagegen`, not as a replacement for it. I
 
 - Still load and follow `$imagegen` first for prompt shaping, transparent-image rules, output handling, and fallback boundaries.
 - Use this skill only when the built-in `image_gen` tool is unavailable or not exposed and the user has agreed to the CLI fallback.
+- In CLI fallback, prefer `scripts/invoke_imagegen_cli.ps1` instead of calling `$imagegen`'s `image_gen.py` directly. The wrapper reads Codex++ settings or the fallback key file, sets temporary environment variables, runs the Python CLI, and restores the previous environment.
+- Do not reject CLI fallback only because the current shell does not already have `OPENAI_API_KEY`; first run `scripts/invoke_imagegen_cli.ps1 -ShowConfig` and check `effectiveHasApiKey`.
 - Do not set persistent user or system environment variables for the drawing API key.
 - Do not ask the user to paste secrets in chat.
 - Do not modify `$imagegen`'s bundled `image_gen.py`.
@@ -62,7 +64,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\ski
 To inspect current configuration without printing the key:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\configure_imagegen_cli.ps1" -Show
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\invoke_imagegen_cli.ps1" -ShowConfig
 ```
 
 ## Default Endpoint
@@ -79,40 +81,22 @@ If the request fails with a path or method error such as `404`, `405`, or an HTM
 
 ## Command Pattern
 
-Wrap every image CLI call with temporary environment variables:
+Run image CLI calls through the wrapper:
 
 ```powershell
-$ErrorActionPreference = 'Stop'
-$keyPath = Join-Path $env:USERPROFILE '.codex\secrets\imagegen-openai-key.txt'
-$settingsPath = Join-Path $env:APPDATA 'Codex++\settings.json'
-$imageGenCli = Join-Path $env:USERPROFILE '.codex\skills\.system\imagegen\scripts\image_gen.py'
-$settings = if (Test-Path -LiteralPath $settingsPath) { Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json } else { $null }
-$apiKey = if ($settings -and $settings.cliWrapperEnabled -and $settings.cliWrapperApiKey) { [string]$settings.cliWrapperApiKey } else { (Get-Content -LiteralPath $keyPath -Raw).Trim() }
-$baseUrl = if ($settings -and $settings.cliWrapperEnabled -and $settings.cliWrapperBaseUrl) { [string]$settings.cliWrapperBaseUrl } else { 'https://code.codingplay.top/v1' }
-$envName = if ($settings -and $settings.cliWrapperEnabled -and $settings.cliWrapperApiKeyEnv) { [string]$settings.cliWrapperApiKeyEnv } else { 'OPENAI_API_KEY' }
-Set-Item -Path "Env:$envName" -Value $apiKey
-$env:OPENAI_API_KEY = $apiKey
-$env:OPENAI_BASE_URL = $baseUrl
-try {
-  python $imageGenCli generate `
-    --prompt-file '<prompt-file>' `
-    --model 'gpt-image-2' `
-    --size '1024x1024' `
-    --quality 'medium' `
-    --out '<output.png>' `
-    --force
-}
-finally {
-  if ($envName) { Remove-Item "Env:$envName" -ErrorAction SilentlyContinue }
-  Remove-Item Env:\OPENAI_API_KEY -ErrorAction SilentlyContinue
-  Remove-Item Env:\OPENAI_BASE_URL -ErrorAction SilentlyContinue
-}
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\invoke_imagegen_cli.ps1" generate `
+  --prompt-file '<prompt-file>' `
+  --model 'gpt-image-2' `
+  --size '1024x1024' `
+  --quality 'medium' `
+  --out '<output.png>' `
+  --force
 ```
 
 For reference-grounded image generation, use the CLI `edit` subcommand and pass repeated `--image` arguments:
 
 ```powershell
-python $imageGenCli edit `
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.codex\skills\image-gen-fuck\scripts\invoke_imagegen_cli.ps1" edit `
   --prompt-file '<prompt-file>' `
   --image '<reference-or-layout-1.png>' `
   --image '<reference-or-layout-2.png>' `
@@ -123,7 +107,7 @@ python $imageGenCli edit `
   --force
 ```
 
-Keep the temporary environment wrapper around this command too.
+The wrapper sets `OPENAI_API_KEY` and `OPENAI_BASE_URL` only for the Python child process and restores the prior environment in `finally`.
 
 ## Failure Handling
 
@@ -133,7 +117,7 @@ Keep the temporary environment wrapper around this command too.
 - If the API returns `405 Not Allowed` when using `https://code.codingplay.top`, retry once with `https://code.codingplay.top/v1`.
 - If `https://code.codingplay.top/v1` also fails with endpoint/path errors, ask for the correct base URL.
 - If generation succeeds but the command times out, check whether the output file exists and validates before retrying.
-- Always report whether `OPENAI_API_KEY` and `OPENAI_BASE_URL` were cleared after the command.
+- Always report whether `OPENAI_API_KEY` and `OPENAI_BASE_URL` were restored or cleared after the command.
 
 ## Relationship To Codex
 
